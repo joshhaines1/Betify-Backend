@@ -9,7 +9,8 @@ export const placeWager = async (req, res) => {
       odds,
       multiplier,
       risk,
-      payout
+      payout,
+      lockDates
     } = req.body;
 
     const userId = req.user.uid; // pulled from auth middleware
@@ -44,6 +45,14 @@ export const placeWager = async (req, res) => {
       return res.status(400).json({ message: "Insufficient balance." });
     }
 
+    for (const date of lockDates) {
+      console.log("Comparing lock date:", date, "with current date:", new Date());
+      if(new Date() >= new Date(date)) {
+        
+        return res.status(400).json({ message: "One or more events are locked. Cannot place wager." });
+      }
+    }
+
     // Create wager
     const wagerRef = db.collection("wagers").doc();
     const wagerId = wagerRef.id;
@@ -73,6 +82,23 @@ export const placeWager = async (req, res) => {
       wagerId,
     });
 
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const deleteAllWagers = async (req, res) => {
+  try {
+    const wagersSnapshot = await db.collection("wagers").get();
+
+    const batch = db.batch();
+    wagersSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    res.json({ message: "All events deleted successfully." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

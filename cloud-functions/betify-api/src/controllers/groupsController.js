@@ -3,7 +3,7 @@ import { db, admin} from "../config/firebase.js";
 export const getGroups = async (req, res) => {
   try {
     const uid = req.user?.uid; // from auth middleware
-    const limit = parseInt(req.query.limit) || 0; // default limit
+    const limit = parseInt(req.query.limit) || 5; // default limit
     const startAfterId = req.query.startAfter || null; // optional cursor
 
     let queryRef = db.collection("groups");
@@ -15,12 +15,6 @@ export const getGroups = async (req, res) => {
         queryRef = queryRef.startAfter(startDoc);
       }
     }
-
-    // Limit of 0 fetches ALL groups
-    if (limit > 0){
-      queryRef = queryRef.limit(limit);
-    }
-    
 
     const snapshot = await queryRef.get();
     const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -205,11 +199,28 @@ export const getEventsByGroup = async (req, res) => {
     const snapshot = await db
       .collection("events")
       .where("groupId", "==", req.params.groupId)
-      .where("acceptingWagers", "==", true)
+      .where("status", "in", ["open", "closed"])
       .get();
 
     const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(events);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const deleteAllGroups = async (req, res) => {
+  try {
+    const groupsSnapshot = await db.collection("groups").get();
+
+    const batch = db.batch();
+    groupsSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    res.json({ message: "All events deleted successfully." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -5,7 +5,8 @@ export const createEvent = async (req, res) => {
     const {
       groupId,
       type,
-      options
+      options,
+      lockDate
     } = req.body;
     
     // ---- Validation ----
@@ -26,9 +27,23 @@ export const createEvent = async (req, res) => {
     // ---- Create event ----
     const eventRef = db.collection("events").doc();
 
+    // Determine lockDate from input or default to 1 hour from now
+    let eventLockDate = null;
+    if (lockDate) {
+      const parsedDate = new Date(lockDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: "Invalid lockDate format." });
+      }
+      eventLockDate = admin.firestore.Timestamp.fromDate(parsedDate);
+    } else {
+      const defaultLock = new Date();
+      defaultLock.setHours(defaultLock.getHours() + 1);
+      eventLockDate = admin.firestore.Timestamp.fromDate(defaultLock);
+    }
     const eventData = {
       id: eventRef.id,
       groupId,
+      lockDate: eventLockDate,
       groupName: groupSnap.data()?.name || "Unnamed Group",
       type, // Basic, Prop, etc.
       options, // Array of betting options
@@ -282,4 +297,21 @@ const settleEvent = async (eventId) => {
     eventId,
     wagersProcessed: processedCount
   };
+};
+
+export const deleteAllEvents = async (req, res) => {
+  try {
+    const eventsSnapshot = await db.collection("events").get();
+
+    const batch = db.batch();
+    eventsSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    res.json({ message: "All events deleted successfully." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };

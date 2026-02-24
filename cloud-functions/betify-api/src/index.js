@@ -7,7 +7,7 @@ import eventsRoutes from "./routes/events.js";
 import usersRoutes from "./routes/users.js";
 import { authMiddleware } from "./middleware/authMiddleware.js";
 
-const app = express();
+const api = express();
 
 // Rate limiting configuration
 const limiter = rateLimit({
@@ -19,32 +19,32 @@ const limiter = rateLimit({
 });
 
 
-app.use(authMiddleware);
-app.use(limiter);
-app.use(cors());
-app.use(express.json());
+api.use(authMiddleware);
+api.use(limiter);
+api.use(cors());
+api.use(express.json());
 
 // Request logging middleware
-app.use((req, res, next) => {
+api.use((req, res, next) => {
   console.log(`${req.method} ${req.originalUrl || req.url}`);
   next();
 });
 
 // Routes
-app.use("/groups", groupsRoutes);
-app.use("/wagers", wagersRoutes);
-app.use("/events", eventsRoutes);
-app.use("/users", usersRoutes);
+api.use("/groups", groupsRoutes);
+api.use("/wagers", wagersRoutes);
+api.use("/events", eventsRoutes);
+api.use("/users", usersRoutes);
 
-app.get("/", (req, res) => {
+api.get("/", (req, res) => {
   res.send("Betify API is running");
 });
 
-// Export the Express app for Cloud Functions
-export default app;
+// Export the Express api for Cloud Functions
+export default api;
 
 // For local development
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`API running on port ${PORT}`));
+  api.listen(PORT, () => console.log(`API running on port ${PORT}`));
 }
