@@ -1,5 +1,5 @@
 import express from "express";
-import { getGroups, getGroupById, createGroup, getEventsByGroup, joinGroup, leaveGroup, getUserCurrencyByGroupId } from "../controllers/groupsController.js";
+import { getGroups, getGroupById, createGroup, getEventsByGroup, joinGroup, leaveGroup, getUserCurrencyByGroupId, getGroupLeaderboard} from "../controllers/groupsController.js";
 
 const router = express.Router();
 
@@ -23,6 +23,9 @@ router.get("/:groupId/events", getEventsByGroup); // Done - events-service -> ge
 
 // Get a users balance for a specific group
 router.get("/:groupId/members/:userId/balance", getUserCurrencyByGroupId);
+
+// Get group leaderboard
+router.get("/:groupId/leaderboard", getGroupLeaderboard); // Done - groups-service -> getGroupLeaderboard
 
 
 export default router;

@@ -225,3 +225,42 @@ export const deleteAllGroups = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+export const getGroupLeaderboard = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    if (!groupId) {
+      return res.status(400).json({ message: "Missing groupId." });
+    }
+
+    const membersSnapshot = await db
+      .collection("groups")
+      .doc(groupId)
+      .collection("members")
+      .orderBy("balance", "desc")
+      .limit(10)
+      .get();
+
+    if (membersSnapshot.empty) {
+      return res.status(404).json({ message: "No members found for this group." });
+    }
+
+    const leaderboard = membersSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        userId: data.id,
+        displayName: data.displayName,
+        balance: data.balance || 0,
+      };
+    });
+
+    // Sort by balance descending
+    leaderboard.sort((a, b) => b.balance - a.balance);
+
+    return res.status(200).json({ leaderboard });
+  } catch (err) {
+    console.error("Error fetching group leaderboard:", err);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+};
