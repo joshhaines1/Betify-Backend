@@ -10,7 +10,7 @@ export const placeWager = async (req, res) => {
       multiplier,
       risk,
       payout,
-      lockDates
+      lockDates,
     } = req.body;
 
     const userId = req.user.uid; // pulled from auth middleware
@@ -21,6 +21,19 @@ export const placeWager = async (req, res) => {
 
     if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
       return res.status(400).json({ message: "Event IDs missing." });
+    }
+
+    for (const eventId of eventIds) {
+      const eventRef = db.collection("events").doc(eventId);
+      const eventSnap = await eventRef.get();
+
+      if (!eventSnap.exists) {
+        return res.status(404).json({ message: `Event with ID ${eventId} not found.` });
+      }
+
+      if (eventSnap.data()?.status === "closed") {
+        return res.status(400).json({ message: `One or more event is closed. Cannot place wager.` });
+      }
     }
 
     // Verify group
@@ -48,7 +61,6 @@ export const placeWager = async (req, res) => {
     for (const date of lockDates) {
       console.log("Comparing lock date:", date, "with current date:", new Date());
       if(new Date() >= new Date(date)) {
-        
         return res.status(400).json({ message: "One or more events are locked. Cannot place wager." });
       }
     }
