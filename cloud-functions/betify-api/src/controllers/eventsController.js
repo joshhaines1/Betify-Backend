@@ -195,6 +195,53 @@ const settleEvent = async (eventId) => {
   const batch = db.batch();
   let processedCount = 0;
 
+  if (outcome.includes("push")){
+    console.log(`Event ${eventId} resulted in a push. Refunding all wagers containing this event.`);
+
+    for (const wagerDoc of wagersSnapshot.docs) {
+      const wager = wagerDoc.data();
+      const picks = wager.picks || [];
+
+      if (picks.length === 0) {
+        console.log(`Skipping wager ${wagerDoc.id} — no picks.`);
+        continue;
+      }
+
+      // Check if this wager includes the event
+      const matchingPick = picks.find(pick => pick.eventId === eventId);
+      if (!matchingPick) {
+        console.log(`Skipping wager ${wagerDoc.id} — no matching pick for this event.`);
+        continue;
+      }
+
+      const amount = wager.risk || 0;
+
+      // Update user balance in group members subcollection
+      const groupRef = db.collection("groups").doc(wager.groupId);
+      const userRef = groupRef.collection("members").doc(wager.userId);
+
+      batch.update(userRef, {
+        balance: admin.firestore.FieldValue.increment(amount)
+      });
+
+      batch.update(wagerDoc.ref, {
+        status: "settled",
+        payout: amount
+      });
+
+      processedCount++;
+    }
+
+    await batch.commit();
+    console.log(`Finished processing push event. Total wagers refunded: ${processedCount}.`);
+
+    return {
+      message: "Event settled as push. All affected wagers refunded.",
+      eventId,
+      wagersProcessed: processedCount
+    };
+  }
+
   for (const wagerDoc of wagersSnapshot.docs) {
     const wager = wagerDoc.data();
     const picks = wager.picks || [];
