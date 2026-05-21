@@ -1,5 +1,5 @@
 import express from "express";
-import { createEvent, updateEvent, deleteEvent } from "../controllers/eventsController.js";
+import { createEvent, updateEvent, deleteEvent, getEventById } from "../controllers/eventsController.js";
 
 const router = express.Router();
 
@@ -11,5 +11,8 @@ router.patch("/:eventId", updateEvent); // Done - events-service -> updateEvent
 
 // Delete an event 
 router.delete("/:eventId", deleteEvent); // Done - events-service -> deleteEvent
+
+// Get a specific event by ID
+router.get("/:eventId", getEventById); // Done - events-service -> getEventById
 
 export default router;

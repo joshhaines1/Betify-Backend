@@ -67,6 +67,20 @@ export const createEvent = async (req, res) => {
   }
 };
 
+export const getEventById = async (req, res) => {
+  try {
+    const snapshot = await db
+      .collection("events")
+      .where("eventId", "==", req.params.eventId)
+      .get();
+
+    const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(events);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 
 export const updateEvent = async (req, res) => {
   try {
