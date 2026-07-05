@@ -2,26 +2,66 @@ import { db, admin} from "../config/firebase.js";
 
 export const getGroups = async (req, res) => {
   try {
-    const uid = req.user?.uid; // from auth middleware
-    const limit = parseInt(req.query.limit) || 5; // default limit
-    const startAfterId = req.query.startAfter || null; // optional cursor
+    const uid = req.user.uid;
+    const limit = parseInt(req.query.limit) || 5;
+    const startAfterId = req.query.startAfter || null;
 
-    let queryRef = db.collection("groups");
-    
-    // Handle pagination with startAfter
+    let queryRef = db
+      .collection("groups")
+      .where("visibility", "==", "Public")
+      .orderBy("creationDate", "desc");
+
     if (startAfterId) {
       const startDoc = await db.collection("groups").doc(startAfterId).get();
+
       if (startDoc.exists) {
         queryRef = queryRef.startAfter(startDoc);
       }
     }
 
-    const snapshot = await queryRef.get();
-    const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let groups = [];
+    let lastDoc = null;
+    let currentQuery = queryRef;
+
+    while (groups.length < limit) {
+      const snapshot = await currentQuery.limit(limit).get();
+
+      if (snapshot.empty) {
+        break;
+      }
+
+      let reachedLimit = false;
+
+      for (const doc of snapshot.docs) {
+        lastDoc = doc; // update on every doc actually examined
+
+        const group = { id: doc.id, ...doc.data() };
+
+        if (!group.members.includes(uid)) {
+          groups.push(group);
+
+          if (groups.length === limit) {
+            reachedLimit = true;
+            break;
+          }
+        }
+      }
+
+      if (reachedLimit) {
+        break; // stop the outer loop too — we have enough
+      }
+
+      if (snapshot.size < limit) {
+        break; // no more documents left
+      }
+
+      currentQuery = queryRef.startAfter(lastDoc);
+
+    }
 
     res.json({
       groups,
-      lastVisible: snapshot.docs[snapshot.docs.length - 1]?.id || null,
+      lastVisible: lastDoc ? lastDoc.id : null,
     });
   } catch (err) {
     console.error("Error fetching groups:", err);

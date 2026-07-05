@@ -28,16 +28,33 @@ export const getUserById = async (req, res) => {
 export const getUsersGroups = async (req, res) => {
   try {
     const uid = req.user.uid; // Make sure auth middleware sets req.user
+    const limit = parseInt(req.query.limit) || 5;
+    const startAfterId = req.query.startAfter || null;
 
-    const snapshot = await db
+    let queryRef = db
       .collection("groups")
       .where("members", "array-contains", uid)
-      .get();
+      .orderBy("creationDate", "desc");
+
+    if (startAfterId) {
+      const startDoc = await db.collection("groups").doc(startAfterId).get();
+
+      if (startDoc.exists) {
+        queryRef = queryRef.startAfter(startDoc);
+      }
+    }
+
+    const snapshot = await queryRef.limit(limit).get();
 
     const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
 
-    res.json(groups);
+    res.json({
+      groups,
+      lastVisible: lastDoc ? lastDoc.id : null,
+    });
   } catch (err) {
+    console.error("Error fetching user's groups:", err);
     res.status(500).json({ error: err.message });
   }
 };

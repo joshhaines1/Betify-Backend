@@ -240,7 +240,8 @@ const settleEvent = async (eventId) => {
 
       batch.update(wagerDoc.ref, {
         status: "settled",
-        payout: amount
+        payout: amount,
+        date: new Date()
       });
 
       processedCount++;
@@ -287,7 +288,8 @@ const settleEvent = async (eventId) => {
       // Mark wager as settled (lost)
       batch.update(wagerDoc.ref, {
         status: "settled",
-        payout: 0
+        payout: 0,
+        date: new Date()
       });
 
       processedCount++;
@@ -341,7 +343,8 @@ const settleEvent = async (eventId) => {
 
       batch.update(wagerDoc.ref, {
         status: "settled",
-        payout: winnings
+        payout: winnings,
+        date: new Date()
       });
 
       processedCount++;
