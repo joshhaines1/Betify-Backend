@@ -1,5 +1,5 @@
 import express from "express";
-import { getGroups, getGroupById, createGroup, getEventsByGroup, joinGroup, leaveGroup, getUserCurrencyByGroupId, getGroupLeaderboard} from "../controllers/groupsController.js";
+import { getGroups, getGroupById, createGroup, getEventsByGroup, joinGroup, leaveGroup, getUserCurrencyByGroupId, getGroupLeaderboard, addRewardedCurrency, deleteGroup} from "../controllers/groupsController.js";
 
 const router = express.Router();
 
@@ -26,6 +26,12 @@ router.get("/:groupId/members/:userId/balance", getUserCurrencyByGroupId);
 
 // Get group leaderboard
 router.get("/:groupId/leaderboard", getGroupLeaderboard); // Done - groups-service -> getGroupLeaderboard
+
+// Add rewarded ad route
+router.post("/:groupId/rewarded-ad", addRewardedCurrency);
+
+//Delete group
+router.post("/:groupId/delete", deleteGroup); // Done - groups-service -> deleteGroup
 
 
 export default router;

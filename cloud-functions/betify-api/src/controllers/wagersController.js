@@ -1,4 +1,4 @@
-import { db } from "../config/firebase.js";
+import { db, admin } from "../config/firebase.js";
 
 export const placeWager = async (req, res) => {
   try {
@@ -39,6 +39,12 @@ export const placeWager = async (req, res) => {
     // Verify group
     const groupRef = db.collection("groups").doc(groupId);
     const groupSnap = await groupRef.get();
+
+    // Update group doc
+    await groupRef.update({
+      "stats.totalBets": admin.firestore.FieldValue.increment(1),
+      "stats.totalWagered": admin.firestore.FieldValue.increment(risk),
+    });
 
     if (!groupSnap.exists) {
       return res.status(404).json({ message: "Group not found." });

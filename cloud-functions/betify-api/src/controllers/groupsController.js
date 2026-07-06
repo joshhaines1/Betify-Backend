@@ -27,6 +27,7 @@ export const getGroups = async (req, res) => {
       const snapshot = await currentQuery.limit(limit).get();
 
       if (snapshot.empty) {
+        console.log("No more groups found.");
         break;
       }
 
@@ -104,6 +105,12 @@ export const createGroup = async (req, res) => {
       admins: [uid],
       members: [uid],
       creationDate: admin.firestore.Timestamp.now(),
+      stats: {
+        members: 1,
+        memberNames: [displayName],
+        totalBets: 0,
+        totalWagered: 0,
+      }
     };
 
     await groupRef.set(groupData);
@@ -151,7 +158,9 @@ export const joinGroup = async (req, res) => {
 
     // Step 1: Add user to members array
     await groupDocRef.update({
-      members: admin.firestore.FieldValue.arrayUnion(uid),
+       members: admin.firestore.FieldValue.arrayUnion(uid),
+      "stats.members": admin.firestore.FieldValue.increment(1),
+      "stats.memberNames": admin.firestore.FieldValue.arrayUnion(displayName)
     });
 
     // Step 2: Add user to members subcollection
@@ -196,6 +205,8 @@ export const leaveGroup = async (req, res) => {
     // Step 1: Remove user from members array
     await groupDocRef.update({
       members: admin.firestore.FieldValue.arrayRemove(uid),
+      "stats.members": admin.firestore.FieldValue.increment(-1),
+      "stats.memberNames": admin.firestore.FieldValue.arrayRemove(req.user.name || "Unknown")
     });
 
     // Step 2: Remove user from members subcollection
@@ -240,11 +251,13 @@ export const getEventsByGroup = async (req, res) => {
       .collection("events")
       .where("groupId", "==", req.params.groupId)
       .where("status", "in", ["open", "closed"])
+      .orderBy("createdAt", "desc")
       .get();
 
     const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(events);
   } catch (err) {
+    console.log("Error fetching events by group:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -302,5 +315,76 @@ export const getGroupLeaderboard = async (req, res) => {
   } catch (err) {
     console.error("Error fetching group leaderboard:", err);
     return res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+export const addRewardedCurrency = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const uid = req.user.uid;
+
+    const groupDocRef = db.collection("groups").doc(groupId);
+    const groupSnap = await groupDocRef.get();
+    if (!groupSnap.exists) return res.status(404).json({ message: "Group not found." });
+
+    const startingCurrency = groupSnap.data()?.startingCurrency || 0;
+    const rewardAmount = Math.round(startingCurrency * 0.075);
+
+    const memberRef = groupDocRef.collection("members").doc(uid);
+    const memberSnap = await memberRef.get();
+    if (!memberSnap.exists) return res.status(404).json({ message: "Member not found." });
+
+    const currentBalance = memberSnap.data()?.balance ?? 0;
+
+    // Only allow the reward if balance is actually at/below the reward amount (i.e., depleted)
+    if (currentBalance > rewardAmount) {
+      return res.status(400).json({ message: "Balance must be depleted to claim a reward." });
+    }
+
+    const newBalance = currentBalance + rewardAmount;
+    await memberRef.update({ balance: newBalance });
+
+    return res.status(200).json({ balance: newBalance });
+  } catch (err) {
+    console.error("Error granting rewarded currency:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const deleteGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const uid = req.user.uid;
+
+    const groupDocRef = db.collection("groups").doc(groupId);
+    const groupSnap = await groupDocRef.get();
+
+    if (!groupSnap.exists) {
+      return res.status(404).json({ message: "Group not found." });
+    }
+
+    const groupData = groupSnap.data();
+
+    // Check if the user is an admin of the group
+    if (!groupData.admins.includes(uid)) {
+      return res.status(403).json({ message: "User is not an admin of this group." });
+    }
+
+    // Delete all members in the subcollection
+    const membersSnapshot = await groupDocRef.collection("members").get();
+    const batch = db.batch();
+    membersSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // Delete the group document
+    batch.delete(groupDocRef);
+
+    await batch.commit();
+
+    return res.status(200).json({ message: "Group deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting group:", err);
+    return res.status(500).json({ error: err.message });
   }
 };

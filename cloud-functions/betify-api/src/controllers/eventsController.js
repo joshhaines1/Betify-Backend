@@ -189,9 +189,13 @@ const settleEvent = async (eventId) => {
     throw new Error("Event must have status 'settled' to process payouts.");
   }
 
-  const outcome = eventData.results;
+  let outcome = eventData.results;
   if (!outcome || outcome.length === 0) {
-    throw new Error("No results found on settled event.");
+    if (eventData.type !== "single outcome") {
+      throw new Error("No results found on settled event.");
+    } else {
+      outcome = ["miss"]
+    }
   }
 
   console.log(`Settled Event ID: ${eventId} with outcome:`, outcome);
