@@ -101,7 +101,7 @@ export const createGroup = async (req, res) => {
       visibility,
       startingCurrency,
       password: password || "",
-      creator: req.user.name,
+      creator: uid,
       admins: [uid],
       members: [uid],
       creationDate: admin.firestore.Timestamp.now(),
@@ -246,21 +246,119 @@ export const getUserCurrencyByGroupId = async (req, res) => {
 
 
 export const getEventsByGroup = async (req, res) => {
+  return getGroupEvents(req, res, ["MSO", "basic"]);
+};
+
+export const getPropsByGroup = async (req, res) => {
+  return getGroupEvents(req, res, ["single outcome", "prop"]);
+};
+
+
+const getGroupEvents = async (req, res, allowedTypes) => {
   try {
-    const snapshot = await db
+    const uid = req.user.uid;
+
+    const limit = Math.min(
+      parseInt(req.query.limit) || 5,
+      20
+    );
+
+    const startAfterId = req.query.startAfter || null;
+
+    let queryRef = db
       .collection("events")
       .where("groupId", "==", req.params.groupId)
       .where("status", "in", ["open", "closed"])
-      .orderBy("createdAt", "desc")
-      .get();
+      .where("type", "in", allowedTypes)
+      .orderBy("createdAt", "desc");
 
-    const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json(events);
+    console.log(startAfterId)
+    if (startAfterId) {
+      const startDoc = await db
+        .collection("events")
+        .doc(startAfterId)
+        .get();
+
+      if (startDoc.exists) {
+        queryRef = queryRef.startAfter(startDoc);
+      }
+    }
+
+
+    const events = [];
+    let lastDoc = null;
+
+    let currentQuery = queryRef;
+
+
+    while (events.length < limit) {
+      const snapshot = await currentQuery
+        .limit(limit)
+        .get();
+
+
+      if (snapshot.empty) {
+        break;
+      }
+
+
+      let lastExaminedDoc = null;
+
+
+      for (const doc of snapshot.docs) {
+        lastExaminedDoc = doc;
+
+        const event = {
+          id: doc.id,
+          ...doc.data(),
+        };
+
+
+        // Safely handle missing members
+        const members = event.members ?? [];
+
+
+        // Only return events user is NOT already in
+        if (!members.includes(uid)) {
+          events.push(event);
+
+          if (events.length >= limit) {
+            break;
+          }
+        }
+      }
+
+
+      // Important: pagination should continue after the last document examined
+      if (lastExaminedDoc) {
+        lastDoc = lastExaminedDoc;
+      }
+
+
+      if (events.length >= limit || snapshot.size < limit) {
+        break;
+      }
+
+
+      currentQuery = queryRef.startAfter(lastDoc);
+    }
+
+
+    res.json({
+      events,
+      lastVisible: lastDoc ? lastDoc.id : null,
+    });
+
+
   } catch (err) {
-    console.log("Error fetching events by group:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Error fetching group events:", err);
+
+    res.status(500).json({
+      error: err.message,
+    });
   }
 };
+
 
 export const deleteAllGroups = async (req, res) => {
   try {
@@ -385,6 +483,95 @@ export const deleteGroup = async (req, res) => {
     return res.status(200).json({ message: "Group deleted successfully." });
   } catch (err) {
     console.error("Error deleting group:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const addGroupAdmin = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { userId } = req.body; // uid of the member to promote
+    const requesterUid = req.user.uid;
+
+    if (!groupId || !userId) {
+      return res.status(400).json({ message: "Missing groupId or userId." });
+    }
+
+    const groupDocRef = db.collection("groups").doc(groupId);
+    const groupSnap = await groupDocRef.get();
+
+    if (!groupSnap.exists) return res.status(404).json({ message: "Group not found." });
+
+    const groupData = groupSnap.data();
+
+    // Only current admins can promote someone else
+    if (!groupData.admins.includes(requesterUid)) {
+      return res.status(403).json({ message: "Only admins can add other admins." });
+    }
+
+    // Target must be a member of the group
+    if (!groupData.members.includes(userId)) {
+      return res.status(400).json({ message: "User must be a member of the group to become an admin." });
+    }
+
+    if (groupData.admins.includes(userId)) {
+      return res.status(200).json({ message: "User is already an admin." });
+    }
+
+    await groupDocRef.update({
+      admins: admin.firestore.FieldValue.arrayUnion(userId),
+    });
+
+    return res.status(200).json({ message: "Admin added successfully." });
+  } catch (err) {
+    console.error("Error adding group admin:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const removeGroupAdmin = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { userId } = req.body; // uid of the admin to demote
+    const requesterUid = req.user.uid;
+
+    if (!groupId || !userId) {
+      return res.status(400).json({ message: "Missing groupId or userId." });
+    }
+
+    const groupDocRef = db.collection("groups").doc(groupId);
+    const groupSnap = await groupDocRef.get();
+
+    if (!groupSnap.exists) return res.status(404).json({ message: "Group not found." });
+
+    const groupData = groupSnap.data();
+
+    // Only current admins can demote another admin
+    if (!groupData.admins.includes(requesterUid)) {
+      return res.status(403).json({ message: "Only admins can remove other admins." });
+    }
+
+    if (!groupData.admins.includes(userId)) {
+      return res.status(200).json({ message: "User is already not an admin." });
+    }
+
+    // Prevent removing the last remaining admin
+    if (groupData.admins.length <= 1) {
+      return res.status(400).json({ message: "Cannot remove the last admin of a group." });
+    }
+
+    // Prevent removing the group creator's admin status
+    if (groupData.creator === userId) {
+      return res.status(403).json({ message: "Cannot remove the group creator's admin status." });
+    }
+
+    await groupDocRef.update({
+      admins: admin.firestore.FieldValue.arrayRemove(userId),
+    });
+
+    return res.status(200).json({ message: "Admin removed successfully." });
+  } catch (err) {
+    console.error("Error removing group admin:", err);
     return res.status(500).json({ error: err.message });
   }
 };

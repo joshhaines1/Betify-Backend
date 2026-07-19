@@ -18,7 +18,6 @@ const limiter = rateLimit({
   },
 });
 
-
 api.use(authMiddleware);
 api.use(limiter);
 api.use(cors());
