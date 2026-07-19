@@ -55,6 +55,11 @@ export const createEvent = async (req, res) => {
     
     await eventRef.set(eventData);
 
+    // Increment the group's active events counter
+    await groupRef.update({
+      "stats.activeEvents": admin.firestore.FieldValue.increment(1),
+    });
+
     return res.status(201).json({
       message: "Event created successfully.",
       eventId: eventRef.id
@@ -99,6 +104,7 @@ export const updateEvent = async (req, res) => {
     }
 
     const previousStatus = eventSnap.data().status;
+    const groupId = eventSnap.data().groupId;
     const updateData = {};
     if (status !== undefined) updateData.status = status;
     if (results !== undefined) {
@@ -114,6 +120,13 @@ export const updateEvent = async (req, res) => {
     updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
     await eventRef.update(updateData);
+
+    // Decrement the group's active events counter once, on the transition into "settled"
+    if (status === "settled" && previousStatus !== "settled" && groupId) {
+      await db.collection("groups").doc(groupId).update({
+        "stats.activeEvents": admin.firestore.FieldValue.increment(-1),
+      });
+    }
 
     const updatedSnap = await eventRef.get();
 
@@ -191,7 +204,7 @@ const settleEvent = async (eventId) => {
 
   let outcome = eventData.results;
   if (!outcome || outcome.length === 0) {
-    if (eventData.type !== "single outcome") {
+    if (eventData.type !== "single outcome prop" || eventData.type !== "single outcome event") {
       throw new Error("No results found on settled event.");
     } else {
       outcome = ["miss"]

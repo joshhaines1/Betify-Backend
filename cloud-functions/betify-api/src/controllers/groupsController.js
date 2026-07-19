@@ -102,6 +102,7 @@ export const createGroup = async (req, res) => {
       startingCurrency,
       password: password || "",
       creator: uid,
+      creatorName: displayName,
       admins: [uid],
       members: [uid],
       creationDate: admin.firestore.Timestamp.now(),
@@ -110,6 +111,7 @@ export const createGroup = async (req, res) => {
         memberNames: [displayName],
         totalBets: 0,
         totalWagered: 0,
+        activeEvents: 0,
       }
     };
 
@@ -246,11 +248,11 @@ export const getUserCurrencyByGroupId = async (req, res) => {
 
 
 export const getEventsByGroup = async (req, res) => {
-  return getGroupEvents(req, res, ["MSO", "basic"]);
+  return getGroupEvents(req, res, ["MSO", "basic", "single outcome event"]);
 };
 
 export const getPropsByGroup = async (req, res) => {
-  return getGroupEvents(req, res, ["single outcome", "prop"]);
+  return getGroupEvents(req, res, ["single outcome prop", "prop"]);
 };
 
 
@@ -272,7 +274,6 @@ const getGroupEvents = async (req, res, allowedTypes) => {
       .where("type", "in", allowedTypes)
       .orderBy("createdAt", "desc");
 
-    console.log(startAfterId)
     if (startAfterId) {
       const startDoc = await db
         .collection("events")
