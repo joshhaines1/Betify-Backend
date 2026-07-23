@@ -204,7 +204,7 @@ const settleEvent = async (eventId) => {
 
   let outcome = eventData.results;
   if (!outcome || outcome.length === 0) {
-    if (eventData.type !== "single outcome prop" || eventData.type !== "single outcome event") {
+    if (eventData.type !== "single outcome prop" && eventData.type !== "single outcome event") {
       throw new Error("No results found on settled event.");
     } else {
       outcome = ["miss"]
