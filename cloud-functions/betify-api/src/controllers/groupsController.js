@@ -17,7 +17,7 @@ const generateInviteCode = () => {
 export const getGroups = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const limit = parseInt(req.query.limit) || 5;
+    const limit = parseInt(req.query.limit) || 8;
     const startAfterId = req.query.startAfter || null;
 
     let queryRef = db
@@ -305,7 +305,7 @@ const getGroupEvents = async (req, res, allowedTypes) => {
     const uid = req.user.uid;
 
     const limit = Math.min(
-      parseInt(req.query.limit) || 5,
+      parseInt(req.query.limit) || 8,
       20
     );
 

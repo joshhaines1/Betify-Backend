@@ -28,7 +28,7 @@ export const getUserById = async (req, res) => {
 export const getUsersGroups = async (req, res) => {
   try {
     const uid = req.user.uid; // Make sure auth middleware sets req.user
-    const limit = parseInt(req.query.limit) || 5;
+    const limit = parseInt(req.query.limit) || 8;
     const startAfterId = req.query.startAfter || null;
 
     let queryRef = db
@@ -68,7 +68,7 @@ export const getWagersByUser = async (req, res) => {
       .collection("wagers")
       .where("userId", "==", userId)
       .orderBy("date", "desc")
-      .limit(5);
+      .limit(8);
 
     // Optional status filter
     if (status) {
