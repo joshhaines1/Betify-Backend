@@ -1,4 +1,18 @@
+import crypto from "crypto";
 import { db, admin} from "../config/firebase.js";
+
+// Excludes visually ambiguous characters (0/O, 1/I).
+const INVITE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const INVITE_CODE_LENGTH = 6;
+const MAX_INVITE_CODE_ATTEMPTS = 10;
+
+const generateInviteCode = () => {
+  let code = "";
+  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
+    code += INVITE_CODE_CHARS[crypto.randomInt(INVITE_CODE_CHARS.length)];
+  }
+  return code;
+};
 
 export const getGroups = async (req, res) => {
   try {
@@ -95,36 +109,66 @@ export const createGroup = async (req, res) => {
     // Step 1: Create group document with auto ID
     const groupRef = db.collection("groups").doc();
     const groupId = groupRef.id;
-
-    const groupData = {
-      name,
-      visibility,
-      startingCurrency,
-      password: password || "",
-      creator: uid,
-      creatorName: displayName,
-      admins: [uid],
-      members: [uid],
-      creationDate: admin.firestore.Timestamp.now(),
-      stats: {
-        members: 1,
-        memberNames: [displayName],
-        totalBets: 0,
-        totalWagered: 0,
-        activeEvents: 0,
-      }
-    };
-
-    await groupRef.set(groupData);
-
-    // Step 2: Add member to subcollection
     const memberRef = groupRef.collection("members").doc(uid);
 
-    await memberRef.set({
-      id: uid,
-      displayName,
-      joinedAt: admin.firestore.Timestamp.now(),
-      balance: startingCurrency,
+    // Step 2: Atomically pick a unique invite code and write everything together,
+    // so the uniqueness check can't race with another group's creation.
+    const groupData = await db.runTransaction(async (transaction) => {
+      let inviteCode = null;
+      let inviteCodeRef = null;
+
+      for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
+        const candidate = generateInviteCode();
+        const candidateRef = db.collection("inviteCodes").doc(candidate);
+        const candidateSnap = await transaction.get(candidateRef);
+
+        if (!candidateSnap.exists) {
+          inviteCode = candidate;
+          inviteCodeRef = candidateRef;
+          break;
+        }
+      }
+
+      if (!inviteCode) {
+        throw new Error("Failed to generate a unique invite code. Please try again.");
+      }
+
+      const data = {
+        name,
+        visibility,
+        startingCurrency,
+        password: password || "",
+        creator: uid,
+        creatorName: displayName,
+        admins: [uid],
+        members: [uid],
+        inviteCode,
+        creationDate: admin.firestore.Timestamp.now(),
+        stats: {
+          members: 1,
+          memberNames: [displayName],
+          totalBets: 0,
+          totalWagered: 0,
+          activeEvents: 0,
+        }
+      };
+
+      transaction.set(groupRef, data);
+
+      transaction.set(inviteCodeRef, {
+        groupId,
+        createdAt: admin.firestore.Timestamp.now(),
+      });
+
+      // Step 3: Add member to subcollection
+      transaction.set(memberRef, {
+        id: uid,
+        displayName,
+        joinedAt: admin.firestore.Timestamp.now(),
+        balance: startingCurrency,
+      });
+
+      return data;
     });
 
     return res.status(201).json({
