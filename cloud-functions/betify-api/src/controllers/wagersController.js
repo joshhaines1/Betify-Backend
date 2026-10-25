@@ -31,8 +31,8 @@ export const placeWager = async (req, res) => {
         return res.status(404).json({ message: `Event with ID ${eventId} not found.` });
       }
 
-      if (eventSnap.data()?.status === "closed") {
-        return res.status(400).json({ message: `One or more event is closed. Cannot place wager.` });
+      if (eventSnap.data()?.status === "closed" || eventSnap.data()?.status === "settled") {
+        return res.status(400).json({ message: `One or more event is closed or settled. Cannot place wager.` });
       }
     }
 
